@@ -142,12 +142,15 @@
         // Editable layers
         const notesPoint = new FeatureLayer({
           url: 'https://services3.arcgis.com/TYPRVx01dlxYVeDd/arcgis/rest/services/swarm_notes_point/FeatureServer/0',
+          refreshInterval: 0.1,
         });
         const notesLine = new FeatureLayer({
           url: 'https://services3.arcgis.com/TYPRVx01dlxYVeDd/arcgis/rest/services/swarm_notes_polyline/FeatureServer/0',
+          refreshInterval: 0.1,
         });
         const notesPolygon = new FeatureLayer({
           url: 'https://services3.arcgis.com/TYPRVx01dlxYVeDd/arcgis/rest/services/swarm_notes_polygon/FeatureServer/0',
+          refreshInterval: 0.1,
         });
 
         // Add the notes layers to the map
