@@ -55,7 +55,16 @@
         'esri/layers/FeatureLayer',
         'esri/widgets/Editor',
         'esri/Graphic',
-      ], (esriConfig, Map, MapView, FeatureLayer, Editor, Graphic) => {
+        'esri/PopupTemplate',
+      ], (
+        esriConfig,
+        Map,
+        MapView,
+        FeatureLayer,
+        Editor,
+        Graphic,
+        PopupTemplate
+      ) => {
         /*
         Constants
         */
@@ -139,18 +148,27 @@
           url: 'https://services3.arcgis.com/TYPRVx01dlxYVeDd/arcgis/rest/services/swarmdata/FeatureServer/0',
         });
 
+        // Popup Template for editable layers
+        const popupTemplate = new PopupTemplate({
+          title: 'Map Note',
+          content: `"{Notes}"<br />{Initials}`,
+        });
+
         // Editable layers
         const notesPoint = new FeatureLayer({
           url: 'https://services3.arcgis.com/TYPRVx01dlxYVeDd/arcgis/rest/services/swarm_notes_point/FeatureServer/0',
           refreshInterval: 0.1,
+          popupTemplate: popupTemplate,
         });
         const notesLine = new FeatureLayer({
           url: 'https://services3.arcgis.com/TYPRVx01dlxYVeDd/arcgis/rest/services/swarm_notes_polyline/FeatureServer/0',
           refreshInterval: 0.1,
+          popupTemplate: popupTemplate,
         });
         const notesPolygon = new FeatureLayer({
           url: 'https://services3.arcgis.com/TYPRVx01dlxYVeDd/arcgis/rest/services/swarm_notes_polygon/FeatureServer/0',
           refreshInterval: 0.1,
+          popupTemplate: popupTemplate,
         });
 
         // Add the notes layers to the map
