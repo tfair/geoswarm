@@ -320,13 +320,12 @@
           });
         };
 
-        // If the user joins a swarm, zoom that user to the active swarm's extent
-        const joinSwarm = () => view.goTo(activeSwarmExtent);
-
         // When the user clicks the swarm button join or request depending on
         // whether or not there is an active swarm
         const swarmCallback = () => {
-          activeSwarm ? joinSwarm() : requestSwarm();
+          activeSwarm
+            ? zoomToFeatureById(swarmExtentLayer, activeSwarmOid)
+            : requestSwarm();
           updateSwarmButton();
         };
         swarmButton.addEventListener('click', swarmCallback);
