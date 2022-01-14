@@ -1,0 +1,486 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+    <title>GeoSwarm</title>
+    <style>
+      html,
+      body,
+      #viewDiv {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+      }
+
+      #panelItem {
+        width: 300px;
+        height: 500px;
+      }
+
+      #listArea {
+        height: 400px;
+        overflow: scroll;
+      }
+    </style>
+
+    <link
+      rel="stylesheet"
+      href="https://js.arcgis.com/4.22/esri/themes/light/main.css"
+    />
+    <script
+      type="module"
+      src="https://js.arcgis.com/calcite-components/1.0.0-beta.73/calcite.esm.js"
+    ></script>
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://js.arcgis.com/calcite-components/1.0.0-beta.73/calcite.css"
+    />
+    <script src="https://js.arcgis.com/4.22/"></script>
+
+    <script>
+      require([
+        'esri/config',
+        'esri/Map',
+        'esri/views/MapView',
+        'esri/layers/FeatureLayer',
+        'esri/widgets/Editor',
+        'esri/Graphic',
+      ], (esriConfig, Map, MapView, FeatureLayer, Editor, Graphic) => {
+        /*
+        Constants
+        */
+        // Note that participants list will be this list, in reverse order (last->first)
+        const users = [
+          { userName: 'Thomas Fair', oid: 2 },
+          { userName: 'Kelly Holleran', oid: 3 },
+          { userName: 'Russell Sands', oid: 1 },
+        ];
+
+        // Authenticate to the ArcGIS Platform
+        esriConfig.apiKey =
+          'AAPK0e4a02ec91f543019baab7e9b04b50272CYWJPVd2g4zHAPHVboJpuvINJGgn4QwlvdyksSNgBXWINkc-T2afZILWv3AhzKF';
+
+        /*
+        LOG IN THE USER
+        Placeholder - for now we simply get the user from a prompt when the application loads
+        */
+        let activeUserName;
+        let activeUserObjectId;
+
+        const getUserId = (userName) => {
+          return users.find((u) => u.userName === userName).oid;
+        };
+
+        while (!activeUserObjectId) {
+          // TODO - Does not work if user is undefined >>> improve the while condition
+          const usersList = users.map((u) => u.userName).join(' | ');
+          activeUserName = prompt(
+            'Please enter your name.\nChoose From: ' + usersList
+          );
+          console.log(activeUserName);
+          if (users.map((u) => u.userName).includes(activeUserName)) {
+            activeUserObjectId = getUserId(activeUserName);
+          }
+          console.log(activeUserName, activeUserObjectId);
+        }
+
+        /*
+        CREATE THE MAP
+        */
+
+        //  Create the Map  //
+        const map = new Map({
+          basemap: 'topo-vector',
+        });
+
+        const view = new MapView({
+          container: 'viewDiv',
+          map: map,
+          zoom: 4,
+          center: [15, 65],
+        });
+
+        /*
+        FEATURE SERVICES
+        Feature Services used by the application
+         - Note that the swarm and user extent services do not get added to the map
+        */
+
+        // Last known location of user's cursor
+        const userCursorLocation = new FeatureLayer({
+          url: 'https://services3.arcgis.com/TYPRVx01dlxYVeDd/arcgis/rest/services/userlocations/FeatureServer/0',
+          refreshInterval: 0.1,
+        });
+
+        // Last known extent of user's view
+        const userViewExtent = new FeatureLayer({
+          url: 'https://services3.arcgis.com/TYPRVx01dlxYVeDd/arcgis/rest/services/usersextents/FeatureServer/0',
+        });
+
+        // Extent of swarms - only one may be active at a time, a swarm will only stay active for 5 minutes
+        const swarmExtentLayer = new FeatureLayer({
+          url: 'https://services3.arcgis.com/TYPRVx01dlxYVeDd/arcgis/rest/services/swarmdata/FeatureServer/0',
+        });
+
+        // Editable layers
+        const notesPoint = new FeatureLayer({
+          url: 'https://services3.arcgis.com/TYPRVx01dlxYVeDd/arcgis/rest/services/swarm_notes_point/FeatureServer/0',
+        });
+        const notesLine = new FeatureLayer({
+          url: 'https://services3.arcgis.com/TYPRVx01dlxYVeDd/arcgis/rest/services/swarm_notes_polyline/FeatureServer/0',
+        });
+        const notesPolygon = new FeatureLayer({
+          url: 'https://services3.arcgis.com/TYPRVx01dlxYVeDd/arcgis/rest/services/swarm_notes_polygon/FeatureServer/0',
+        });
+
+        // Add the notes layers to the map
+        map.add(notesPoint);
+        map.add(notesLine);
+        map.add(notesPolygon);
+
+        // Add user cursor locations to the map - user does not need to see their own cursor.
+        const definitionQuery = `OBJECTID <> ${activeUserObjectId}`;
+        userCursorLocation.definitionExpression = definitionQuery;
+        map.add(userCursorLocation);
+
+        /*
+        FEATURE SERVICE UPDATE FUNTIONALITY
+        When a user interacts with the map, update the cursor and extent services
+        */
+
+        // Setup variables that help reduce unescessary updates //
+
+        // If the user updates their extent, flag that there is an update
+        let userUpdatedExtent = false;
+        view.watch('updating', (updating) => {
+          if (!updating) userUpdatedExtent = true;
+        });
+
+        // When the user moves their mouse, get the XY.
+        let point;
+        let userUpdatedCursor = false;
+        view.on('pointer-move', (evt) => {
+          let { x, y, ...rest } = view.toMap(evt);
+          point = { x, y };
+          userUpdatedCursor = true;
+        });
+
+        // Update the cursor location and extent serivices //
+
+        // Update services if the view is loaded and changes have occured
+        const updateCursorAndExtent = async () => {
+          if (view.ready) {
+            // Update cursor location if it has moved
+            if (userUpdatedCursor) {
+              userCursorLocation.applyEdits({
+                updateFeatures: [getCursorUpdateParams()],
+              });
+              userUpdatedCursor = false;
+            }
+            // Update Extent if it has changed
+            if (userUpdatedExtent) {
+              const extentResult = await userViewExtent.applyEdits({
+                updateFeatures: [
+                  getExtentUpdateParams(
+                    (attributes = { OBJECTID: activeUserObjectId })
+                  ),
+                ],
+              });
+              userUpdatedExtent = false;
+            }
+          }
+        };
+
+        // Get the update parameters for the extent service - also used by "Swarm"
+        const getExtentUpdateParams = (attributes = {}) => {
+          console.log(attributes);
+          const geometry = {
+            type: 'polygon',
+            rings: [
+              [view.extent.xmin, view.extent.ymax],
+              [view.extent.xmax, view.extent.ymax],
+              [view.extent.xmax, view.extent.ymin],
+              [view.extent.xmin, view.extent.ymin],
+              [view.extent.xmin, view.extent.ymax],
+            ],
+            spatialReference: view.extent.spatialReference,
+          };
+          return { attributes, geometry };
+        };
+
+        // Get the update parameters for the cursor service
+        const getCursorUpdateParams = () => {
+          const attributes = {
+            OBJECTID: activeUserObjectId,
+          };
+          const geometry = {
+            type: 'point',
+            x: point.x,
+            y: point.y,
+            spatialReference: view.spatialReference,
+          };
+          return { attributes, geometry };
+        };
+
+        // Call the update function at a set frequency.
+        setInterval(updateCursorAndExtent, 1000);
+
+        /*
+        USER INTERFACE AND BUTTON FUNCTIONALITY
+        User needs the ability to perform edits, request a swarm, join a swarm, and jump to another user
+        */
+
+        // Zoom to a user's last known location - Necessary for "Watch" and "Swarm"
+        const zoomToFeatureById = async (freatureLayer, oid) => {
+          const extent = await freatureLayer.queryExtent(
+            (query = { where: `OBJECTID = ${oid}` })
+          );
+          view.goTo(extent);
+        };
+
+        // User List & "Watch" User Button //
+        // Create the user card for a specific user
+        const addUserCard = (user, divUserPanel) => {
+          // the 'watch' button will only be added for users who are not the active user
+          const watchButton =
+            user.oid === activeUserObjectId
+              ? ''
+              : `<calcite-button id="watch--${user.oid}" appearance="clear" color="blue" icon-start="feature-layer" style="float:right">Watch</calcite-button>`;
+          const userChip = `
+              <div style="padding-bottom:10px;padding-top:10px">
+                <calcite-chip>
+                  <calcite-avatar slot="image" size="l" color="red" full-name="${user.userName}">
+                  </calcite-avatar>${user.userName}
+                </calcite-chip>
+                ${watchButton}
+              </div>`;
+          divUserPanel.insertAdjacentHTML('afterbegin', userChip);
+        };
+
+        // Update the user panel with a card for each user and a functional watch button
+        const updateUserPanel = () => {
+          const divUserPanel = document.getElementById('users--panel');
+          users.forEach((u) => {
+            addUserCard(u, divUserPanel);
+            if (u.oid !== activeUserObjectId) {
+              userWatchButton = document.getElementById(`watch--${u.oid}`);
+              userWatchButton.addEventListener('click', () =>
+                zoomToFeatureById(userViewExtent, u.oid)
+              );
+            }
+          });
+        };
+
+        // Swarm Functionality //
+        // - Only one swarm may be active at a time, a swarm lasts for 5 minutes.
+        // - All users see the active swarm and can "join" it.
+        // - If there is no active swarm, any user may start a swarm
+
+        // If a swarm is active, its extent will be stored here
+        let activeSwarmExtent;
+
+        // Currenlty only the active swarm is persisted
+        let activeSwarmOid = 6;
+
+        // Variable for whether there is an active swarm or not
+        let activeSwarm = false;
+
+        // The swarm button
+        const swarmButton = document.getElementById('button--swarm');
+
+        // If a user requests a swarm, upate the swarm service and toggle swarm
+        const requestSwarm = async () => {
+          activeSwarm = true;
+          activeSwarmExtent = view.extent;
+          const swarmExtentResult = await swarmExtentLayer.applyEdits({
+            updateFeatures: [
+              getExtentUpdateParams(
+                (attributes = {
+                  OBJECTID: 6,
+                  ActivationTime: new Date(),
+                })
+              ),
+            ],
+          });
+        };
+
+        // If the user joins a swarm, zoom that user to the active swarm's extent
+        const joinSwarm = () => view.goTo(activeSwarmExtent);
+
+        // When the user clicks the swarm button join or request depending on
+        // whether or not there is an active swarm
+        const swarmCallback = () => {
+          activeSwarm ? joinSwarm() : requestSwarm();
+          updateSwarmButton();
+        };
+        swarmButton.addEventListener('click', swarmCallback);
+
+        // Update the swarm button text & callback
+        const updateSwarmButton = () => {
+          if (activeSwarm) {
+            swarmButton.setAttribute('color', 'blue');
+            swarmButton.setAttribute('appearance', 'solid');
+            swarmButton.innerHTML = 'Join the Swarm!';
+          } else {
+            swarmButton.setAttribute('color', 'red');
+            swarmButton.setAttribute('appearance', 'outline');
+            swarmButton.innerHTML = 'Request a Swarm';
+          }
+        };
+
+        // Get the elapsed minutes between a Date and the current Date
+        const elapsedMinutes = (date1) => {
+          return (new Date().getTime() - date1.getTime()) / 60000;
+        };
+
+        // Check for an active swarm
+        const checkSwarmStatus = async () => {
+          const query = {
+            where: `OBJECTID = ${activeSwarmOid}`,
+            returnGeometry: false,
+            outFields: ['ActivationTime'],
+          };
+          const results = await swarmExtentLayer.queryFeatures();
+          console.log(results);
+          const lastSwarmActivation = new Date(
+            (second = results.features[0].attributes.ActivationTime)
+          );
+          // Has someone requested a swarm in the prior 5 minutes?
+          activeSwarm = elapsedMinutes(lastSwarmActivation) < 0.5;
+          updateSwarmButton();
+        };
+
+        setInterval(checkSwarmStatus, 5000);
+
+        // Editor Functionlality //
+
+        // All layers have the same set of settings - use a function to build layerInfos
+        const makeLayerInfo = (editLayer) => {
+          return {
+            layer: editLayer,
+            formTemplate: {
+              elements: [
+                {
+                  type: 'field',
+                  fieldName: 'Notes',
+                  label: 'Notes',
+                },
+                {
+                  type: 'field',
+                  fieldName: 'Initials',
+                  label: 'Initials',
+                },
+              ],
+            },
+          };
+        };
+
+        // Create the editor and disable user edits to cursor service
+        const editor = new Editor({
+          visible: false,
+          view: view,
+          layerInfos: [
+            makeLayerInfo(notesPoint),
+            makeLayerInfo(notesLine),
+            makeLayerInfo(notesPolygon),
+            {
+              layer: userCursorLocation,
+              enabled: false,
+            },
+          ],
+        });
+
+        // Control the behavior and text of the map notes button
+        addMapNotesButton = document.getElementById('add--map--notes');
+        const toggleNoteButton = () => {
+          editor.visible = !editor.visible;
+          editor.visible
+            ? (addMapNotesButton.innerHTML = 'Close Map Notes')
+            : (addMapNotesButton.innerHTML = 'Add Map Notes');
+        };
+        addMapNotesButton.addEventListener('click', () => {
+          toggleNoteButton();
+        });
+
+        // Swarm UI Panel //
+        // Add a panel to the UI which holds the Swarm, Meet, and Watch functionality
+        const addSwarmUI = () => {
+          const panel = document.getElementById('swarm--functionality');
+          view.ui.add(panel, 'top-right');
+        };
+
+        // What needs to happen to initialize the UI
+        const initUI = () => {
+          view.ui.add('title', 'top-right');
+          view.ui.add('zoom', 'top-left');
+          view.ui.add(editor, 'bottom-right');
+          updateUserPanel();
+          checkSwarmStatus();
+          addSwarmUI();
+        };
+        initUI();
+      });
+    </script>
+  </head>
+
+  <body>
+    <div>
+      <calcite-panel id="title" heading="GeoSwarm" color="blue"></calcite-panel>
+    </div>
+    <div>
+      <calcite-panel id="swarm--functionality" heading=" ">
+        <div
+          style="text-align: center; padding-bottom: 10px; padding-top: 10px"
+        >
+          <calcite-button
+            alignment="center"
+            appearance="clear"
+            icon-end="layer-zoom-to"
+            scale="l"
+            width="half"
+            id="button--swarm"
+          ></calcite-button>
+        </div>
+        <calcite-button id="add--map--notes" width="half" slot="footer-actions"
+          >Add Map Notes</calcite-button
+        >
+        <calcite-block
+          heading="Participants"
+          summary="Individuals in the GeoSwarm"
+          collapsible
+        >
+          <div>
+            <calcite-panel id="users--panel" theme="light" scale="s">
+            </calcite-panel>
+          </div>
+        </calcite-block>
+        <calcite-block
+          heading="Web Meeting"
+          summary="Join web meeting to talk to the GeoSwarm"
+          collapsible
+          disabled
+        >
+          <calcite-panel theme="light" scale="s">
+            <div
+              style="
+                text-align: center;
+                padding-bottom: 10px;
+                padding-top: 10px;
+              "
+            >
+              <calcite-button appearance="clear" width="half" scale="m"
+                >Join Web Meeting</calcite-button
+              >
+            </div>
+          </calcite-panel>
+        </calcite-block>
+      </calcite-panel>
+    </div>
+    <div id="viewDiv"></div>
+  </body>
+</html>
