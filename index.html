@@ -362,7 +362,7 @@
             (second = results.features[0].attributes.ActivationTime)
           );
           // Has someone requested a swarm in the prior 5 minutes?
-          activeSwarm = elapsedMinutes(lastSwarmActivation) < 0.5;
+          activeSwarm = elapsedMinutes(lastSwarmActivation) < 1;
           updateSwarmButton();
         };
 
