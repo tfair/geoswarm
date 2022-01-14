@@ -93,11 +93,9 @@
           activeUserName = prompt(
             'Please enter your name.\nChoose From: ' + usersList
           );
-          console.log(activeUserName);
           if (users.map((u) => u.userName).includes(activeUserName)) {
             activeUserObjectId = getUserId(activeUserName);
           }
-          console.log(activeUserName, activeUserObjectId);
         }
 
         /*
@@ -212,7 +210,6 @@
 
         // Get the update parameters for the extent service - also used by "Swarm"
         const getExtentUpdateParams = (attributes = {}) => {
-          console.log(attributes);
           const geometry = {
             type: 'polygon',
             rings: [
@@ -360,7 +357,6 @@
             outFields: ['ActivationTime'],
           };
           const results = await swarmExtentLayer.queryFeatures();
-          console.log(results);
           const lastSwarmActivation = new Date(
             (second = results.features[0].attributes.ActivationTime)
           );
