@@ -416,12 +416,18 @@
 
         // What needs to happen to initialize the UI
         const initUI = () => {
+          // Position the core elements of the UI
           view.ui.add('title', 'top-right');
           view.ui.add('zoom', 'top-left');
           view.ui.add(editor, 'bottom-right');
+
+          // Update the user and swarm UIs
           updateUserPanel();
           checkSwarmStatus();
           addSwarmUI();
+
+          // Zoom the map to the user's last location
+          zoomToFeatureById(userViewExtent, activeUserObjectId);
         };
         initUI();
       });
