@@ -16,7 +16,7 @@ GeoSwarm was built using private hosted feature layers for the tracking of users
 
 ## Presentation and demo
 
-https://esriis-my.sharepoint.com/:v:/g/personal/kel10340_esri_com/Eb4gVsdVrylKs16WfVvfYIoBF_vC2P2WHiNedHtIHb75eQ?e=luzqyZ
+https://vimeo.com/666514128
 
 ## The team
 Kelly Holleran, Russell Sands, Thomas Fair
