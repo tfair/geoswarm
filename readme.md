@@ -13,3 +13,10 @@ Before COVID-19, teams would gather in conference rooms, project a map, and then
 ## How we built it
 
 GeoSwarm was built using private hosted feature layers for the tracking of users location and editing functionality as well as basemaps. The application was built on the ArcGIS API for JavaScript 4.22 and the Calcite Design System.
+
+## Presentation and demo
+
+https://esriis-my.sharepoint.com/:v:/g/personal/kel10340_esri_com/Eb4gVsdVrylKs16WfVvfYIoBF_vC2P2WHiNedHtIHb75eQ?e=luzqyZ
+
+## The team
+Kelly Holleran, Russell Sands, Thomas Fair
